@@ -1,7 +1,7 @@
 import argparse
 import numpy as np, cv2
 
-def make_side_by_side(left, right, out_path="../output/stereo_pair.png"):
+def make_side_by_side(left, right, out_path="../output/depth_warp/stereo_pair.png"):
     pair = np.hstack([left, right])
     show_image("Comparison", pair / 255)
     cv2.imwrite(out_path, pair.astype(np.uint8))
