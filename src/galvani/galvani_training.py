@@ -1,0 +1,232 @@
+import os, json, math, random, torch
+from collections import defaultdict
+from PIL import Image
+from torch.utils.data import Dataset, DataLoader, Sampler
+from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler, DDPMScheduler
+from torch import nn, optim
+from tqdm import tqdm
+
+from dataset import StereoScenesDataset
+from sampler import BalancedByBaselineSampler
+
+# returns baseline/fov for a meta file
+def _read_meta(meta_path):
+    baseline, fov = 0.08, 60.0
+    if os.path.exists(meta_path):
+        with open(meta_path, "r") as f:
+            m = json.load(f)
+
+        if "baseline_m" in m:
+          baseline = float(m["baseline_m"])
+
+        if "fov_deg"   in m:
+          fov = float(m["fov_deg"])
+
+        # Fallbacks
+        # No FOV in meta file
+        if (m.get("fov_deg") is None) and "fx" in m and "width" in m:
+            # calculate fov from width and focal length
+            fov = math.degrees(2.0 * math.atan((float(m["width"])*0.5)/float(m["fx"])))
+
+        # No baseline in meta file
+        if (m.get("baseline_m") is None) and "cam_left" in m and "cam_right" in m:
+            # calculate baseline from x coordinates of both cameras
+            try:
+                tx_l = float(m["cam_left"]["matrix_world"][0][3])
+                tx_r = float(m["cam_right"]["matrix_world"][0][3])
+                baseline = abs(tx_r - tx_l)
+            except Exception:
+                pass
+    return max(0.01, min(1.0, baseline)), max(20.0, min(120.0, fov))
+
+
+# directories
+DATA_ROOT = "../../data/galvani"
+DATA_DIR = f"{DATA_ROOT}/fixed_baselines"
+MODEL_ID = "runwayml/stable-diffusion-v1-5"
+HF_CACHE = f"{DATA_ROOT}/hf_cache"
+OUTPUT_DIR = f"{DATA_ROOT}/lora_out_2"
+
+# settings
+R_UNET     = 16
+R_TE       = 8
+LR         = 3e-5
+BATCHSIZE  = 1
+IMAGE_SIZE = (384, 384)
+
+# training
+STEPS_PER_EPOCH = 2000
+MAX_STEPS = 25000
+GRAD_ACCUM  = 4
+WEIGHT_DECAY = 1e-2
+DEVICE = "cuda"
+
+
+# pipeline
+pipe = StableDiffusionPipeline.from_pretrained(
+    MODEL_ID,
+    cache_dir=HF_CACHE,
+    safety_checker=None,
+    requires_safety_checker=False
+)
+
+pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)  
+pipe.enable_vae_tiling()
+pipe.vae.enable_slicing()
+pipe.enable_attention_slicing()
+pipe.to("cuda")
+
+for m in [pipe.unet, pipe.vae, pipe.text_encoder]:
+    m.to(device="cuda", dtype=torch.float16)
+
+
+# LoRA
+from peft import LoraConfig, get_peft_model, get_peft_model_state_dict
+
+# freeze base
+for p in pipe.unet.parameters(): p.requires_grad_(False)
+for p in pipe.vae.parameters():  p.requires_grad_(False)
+for p in pipe.text_encoder.parameters(): p.requires_grad_(False)
+
+# UNet-LoRA
+lora_cfg_unet = LoraConfig(
+    r=R_UNET,
+    lora_alpha=R_UNET*2,
+    lora_dropout=0.0,
+    bias="none",
+    target_modules=["to_q","to_k","to_v","to_out.0"],
+    init_lora_weights="gaussian",
+)
+pipe.unet.add_adapter(lora_cfg_unet, adapter_name="stereo")
+pipe.unet.set_adapters(["stereo"])
+UNET_DTYPE = next(pipe.unet.parameters()).dtype
+for n, p in pipe.unet.named_parameters():
+    if "lora" in n: p.data = p.data.to(UNET_DTYPE)
+
+# Text-Encoder-LoRA
+te_lora = LoraConfig(
+    r=R_TE, lora_alpha=R_TE*2, lora_dropout=0.0, bias="none",
+    target_modules=["q_proj","k_proj","v_proj","out_proj"]
+)
+pipe.text_encoder = get_peft_model(pipe.text_encoder, te_lora)
+pipe.text_encoder.to(device="cuda", dtype=torch.float16)
+
+# ---------------- token registration ----------------
+ds = StereoScenesDataset(DATA_DIR, size=IMAGE_SIZE)
+
+# registriere alle <B_xx>, plus <LEFT>, <RIGHT>
+extra_tokens = sorted({s["btag"] for s in ds.samples} | {"<LEFT>", "<RIGHT>"})
+added = pipe.tokenizer.add_tokens(list(extra_tokens))
+if added > 0:
+    pipe.text_encoder.resize_token_embeddings(len(pipe.tokenizer))
+
+# ---------------- dataloader (A) ----------------
+sampler = BalancedByBaselineSampler(ds.samples, batch_size=BATCHSIZE, steps_per_epoch=STEPS_PER_EPOCH)
+dl = DataLoader(ds, batch_size=BATCHSIZE, sampler=sampler, collate_fn=lambda b: b, num_workers=0)
+
+# ---------------- optimizer (B) ----------------
+trainable = []
+for n,p in pipe.unet.named_parameters():
+    if "lora" in n and p.requires_grad: trainable.append(p)
+for p in pipe.text_encoder.parameters():
+    if p.requires_grad: trainable.append(p)
+
+opt = optim.AdamW(trainable, lr=LR, weight_decay=WEIGHT_DECAY, betas=(0.9, 0.99))
+
+# ---------------- encode helper ----------------
+def get_prompt_embeds(pipe, prompts, device):
+    try:
+        enc = pipe.encode_prompt(
+            prompts,
+            device=device,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=False,
+            negative_prompt=None,
+        )
+        return enc[0] if isinstance(enc, tuple) else enc
+    except Exception:
+        tok = pipe.tokenizer(
+            prompts, padding="max_length",
+            max_length=pipe.tokenizer.model_max_length,
+            truncation=True, return_tensors="pt",
+        )
+        input_ids = tok.input_ids.to(device)
+        with torch.no_grad():
+            enc = pipe.text_encoder(input_ids)[0]
+        return enc
+
+# ---------------- training (C): DDPM + SNR-Loss ----------------
+train_sched = DDPMScheduler(num_train_timesteps=1000, beta_schedule="scaled_linear")
+alphas_cumprod = train_sched.alphas_cumprod.to("cuda")  # [T]
+
+vae, unet = pipe.vae, pipe.unet
+vae.eval(); pipe.text_encoder.eval(); unet.train()
+
+step = 0
+pbar = tqdm(total=MAX_STEPS, desc="train")
+opt.zero_grad(set_to_none=True)
+
+while step < MAX_STEPS:
+    for batch in dl:
+        images  = [s["image"]  for s in batch]
+        prompts = [s["prompt"] for s in batch]
+
+        # leichte, sichere Augmentation (optional)
+        # -> hier weggelassen, falls gewünscht: kleine Helligkeits-/Kontrastjitter vor preprocess
+
+        with torch.no_grad():
+            vae_dtype = next(vae.parameters()).dtype
+            px = pipe.image_processor.preprocess(images).to("cuda", dtype=vae_dtype)
+            latents = vae.encode(px).latent_dist.sample().to(UNET_DTYPE) * 0.18215
+
+            noise = torch.randn_like(latents, dtype=UNET_DTYPE, device="cuda")
+            t = torch.randint(0, train_sched.config.num_train_timesteps, (latents.size(0),), device="cuda").long()
+            noisy_latents = train_sched.add_noise(latents, noise, t)
+
+            prompt_embeds = get_prompt_embeds(pipe, prompts, "cuda").to("cuda", dtype=UNET_DTYPE)
+
+        pred = unet(noisy_latents, t, encoder_hidden_states=prompt_embeds).sample
+
+        # SNR-Loss
+        snr = alphas_cumprod[t] / (1 - alphas_cumprod[t])
+        gamma = 5.0
+        loss_weight = torch.minimum(snr, torch.full_like(snr, gamma)) / (snr + 1.0)
+        per_ex = (pred - noise).pow(2).mean(dim=(1,2,3))
+        loss = (loss_weight * per_ex).mean()
+
+        (loss / GRAD_ACCUM).backward()
+        if (step + 1) % GRAD_ACCUM == 0:
+            torch.nn.utils.clip_grad_norm_(trainable, 1.0)
+            opt.step()
+            opt.zero_grad(set_to_none=True)
+
+        step += 1
+        pbar.set_postfix(loss=f"{loss.item():.4f}")
+        pbar.update(1)
+        if step >= MAX_STEPS:
+            break
+
+pbar.close()
+print("Training done.")
+
+
+# Tokenizer (neue Tokens)
+pipe.tokenizer.save_pretrained(OUTPUT_DIR)
+
+# UNet-LoRA
+pipe.unet.set_adapters(["stereo"])
+pipe.save_lora_weights(
+    OUTPUT_DIR,
+    unet_lora_layers=pipe.unet,
+    weight_name="stereo_unet.safetensors",
+    safe_serialization=True,
+)
+
+# Text-Encoder-LoRA
+from peft import get_peft_model_state_dict
+te_lora_sd = get_peft_model_state_dict(pipe.text_encoder)
+torch.save(te_lora_sd, os.path.join(OUTPUT_DIR, "stereo_te.safetensors"))
+
+print("Saved UNet-LoRA ->", os.path.join(OUTPUT_DIR, "stereo_unet.safetensors"))
+print("Saved TE-LoRA   ->", os.path.join(OUTPUT_DIR, "stereo_te.safetensors"))
+print("Tokenizer saved ->", OUTPUT_DIR)

@@ -206,7 +206,9 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-
-
 # Mac
 .DS_Store
+
+
+# galvani
+data/galvani/**
