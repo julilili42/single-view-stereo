@@ -220,3 +220,6 @@ src/galvani/stereo_diffusion/midas_models/dpt_hybrid-midas-501f0c75.pt
 # src/galvani/stereo_diffusion/outputs/*
 # src/galvani/stereo_diffusion/ori_img/*
 # src/galvani/stereo_diffusion/depth2stereo.bash
+src/galvani/stereo_diffusion/stablediffusion/**
+src/galvani/stereo_diffusion/DPT/**
+src/galvani/stereo_diffusion/prompt-to-prompt/**
