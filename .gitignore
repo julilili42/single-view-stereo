@@ -214,9 +214,9 @@ __marimo__/
 data/galvani/**
 
 # stereodiffusion
-# src/galvani/stereodiffusion/__pycache__/*
-# src/galvani/stereodiffusion/img2stereoimg.py
-# src/galvani/stereodiffusion/midas_models/dpt_hybrid-midas-501f0c75.pt
-# src/galvani/stereodiffusion/outputs/*
-# src/galvani/stereodiffusion/ori_img/*
-# src/galvani/stereodiffusion/depth2stereo.bash
+# src/galvani/stereo_diffusion/__pycache__/*
+# src/galvani/stereo_diffusion/img2stereoimg.py
+src/galvani/stereo_diffusion/midas_models/dpt_hybrid-midas-501f0c75.pt
+# src/galvani/stereo_diffusion/outputs/*
+# src/galvani/stereo_diffusion/ori_img/*
+# src/galvani/stereo_diffusion/depth2stereo.bash
