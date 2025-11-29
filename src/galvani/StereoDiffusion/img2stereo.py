@@ -7,12 +7,12 @@ from tqdm import tqdm, trange
 from einops import rearrange, repeat
 import sys
 from typing import Optional, Union, Tuple, List
-sys.path.append('./stablediffusion')
-sys.path.append('./DPT')
-from stablediffusion.ldm.util import instantiate_from_config
-from DPT.dpt.models import DPTDepthModel
+sys.path.append('./StableDiffusion')
+sys.path.append('./DensePredictionTransformer')
+from StableDiffusion.ldm.util import instantiate_from_config
+from DensePredictionTransformer.dpt.models import DPTDepthModel
 from stereoutils import *
-sys.path.append('./prompt-to-prompt')
+sys.path.append('./PromptToPrompt')
 import ptp_utils 
 from skimage.transform import resize
 # import p2putil

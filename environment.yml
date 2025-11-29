@@ -1,3 +1,5 @@
+# IMPORTANT: version numbers are not correct, update version numbers before release!!!
+
 name: stereoview
 channels:
   - conda-forge
@@ -10,7 +12,7 @@ dependencies:
   # stablediffusion
   - cudatoolkit=11.3
   - pytorch=1.12.1
-  - torchvision=0.13.1
+  - torchvision=0.24 #0.13.1
   - numpy=1.23.1
   - pip:
     - numpy==2.2.6
@@ -45,7 +47,7 @@ dependencies:
     - torchmetrics==0.6.0
     - -e .
     # DPT
-    - timm==0.4.5
+    - timm #==0.4.5
     # prompt-to-prompt
     # - nothing to add
     

@@ -9,8 +9,8 @@ from einops import rearrange,repeat
 import gc
 from torchvision.utils import save_image
 import sys
-sys.path.append('./stablediffusion')
-from stablediffusion.ldm.models.diffusion.ddim import DDIMSampler
+sys.path.append('./StableDiffusion')
+from StableDiffusion.ldm.models.diffusion.ddim import DDIMSampler
 
 def stereo_shift_torch(input_images, depthmaps,sacle_factor=8,shift_both = False,stereo_offset_exponent=1.0):
     '''input: [B, C, H, W] depthmap: [B, H, W]'''

@@ -1,5 +1,5 @@
 import sys
-sys.path.append('./prompt-to-prompt')
+sys.path.append('./PromptToPrompt')
 from typing import Optional, Union, Tuple, List, Callable, Dict
 # from tqdm.notebook import tqdm
 from tqdm import tqdm

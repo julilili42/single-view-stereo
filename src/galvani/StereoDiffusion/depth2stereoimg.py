@@ -13,11 +13,11 @@ from pytorch_lightning import seed_everything
 import torchvision.utils as vutils
 import sys
 
-sys.path.append('./stablediffusion')
-sys.path.append('./DPT')
-from stablediffusion.ldm.util import instantiate_from_config
-from DPT.dpt.models import DPTDepthModel
-from stablediffusion.ldm.data.util import AddMiDaS
+sys.path.append('./StableDiffusion')
+sys.path.append('./DensePredictionTransformer')
+from StableDiffusion.ldm.util import instantiate_from_config
+from DensePredictionTransformer.dpt.models import DPTDepthModel
+from StableDiffusion.ldm.data.util import AddMiDaS
 from stereoutils import *
 torch.set_grad_enabled(False)
 
