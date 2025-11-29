@@ -1,5 +1,3 @@
-# IMPORTANT: version numbers are not correct, update version numbers before release!!!
-
 name: stereoview
 channels:
   - conda-forge
@@ -10,12 +8,11 @@ dependencies:
   - python=3.10
   - pip
   # stablediffusion
-  - cudatoolkit=11.3
+  - cudatoolkit=11.8.0
   - pytorch=1.12.1
-  - torchvision=0.24 #0.13.1
-  - numpy=1.23.1
+  - torchvision=0.24
+  - numpy=1.24.3
   - pip:
-    - numpy==2.2.6
     - peft==0.17.1
     - tqdm==4.67.1
     - opencv-python==4.12.0.88
@@ -25,11 +22,11 @@ dependencies:
     - safetensors==0.6.2
     - mathutils==3.3.0
     - pandas==2.3.3
-    - matplotlib
-    - tueplots
+    - matplotlib==3.10.7
+    - tueplots==0.2.1
     # stereodiffusion
-    - ftfy
-    - ipywidgets
+    - ftfy==6.3.1
+    - ipywidgets==8.1.8
     # stablediffusion
     - albumentations==1.3.0
     - imageio==2.9.0
@@ -38,16 +35,16 @@ dependencies:
     - omegaconf==2.1.1
     - test-tube>=0.7.5
     - streamlit==1.12.1
+    - streamlit-drawable-canvas==0.8.0
     - einops==0.3.0
     - webdataset==0.2.5
     - kornia==0.6
     - open_clip_torch==2.0.2
-    - invisible-watermark>=0.1.5
-    - streamlit-drawable-canvas==0.8.0
+    - invisible-watermark==0.2.0
     - torchmetrics==0.6.0
     - -e .
     # DPT
-    - timm #==0.4.5
+    - timm==0.4.5
     # prompt-to-prompt
     # - nothing to add
     
