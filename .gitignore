@@ -214,12 +214,10 @@ __marimo__/
 data/galvani/**
 
 # stereo diffusion
-# src/galvani/StereoDiffusion/__pycache__/*
-# src/galvani/StereoDiffusion/img2stereoimg.py
 src/galvani/StereoDiffusion/midas_models/dpt_hybrid-midas-501f0c75.pt
 src/galvani/StereoDiffusion/outputs/*
-# src/galvani/StereoDiffusion/ori_img/*
-# src/galvani/StereoDiffusion/depth2stereo.bash
+src/galvani/StereoDiffusion/models/512-depth-ema.ckpt
+src/galvani/StereoDiffusion/models/v2-1_768-ema-pruned.ckpt
 
 # dpt
 
