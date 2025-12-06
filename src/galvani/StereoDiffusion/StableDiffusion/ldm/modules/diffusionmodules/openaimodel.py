@@ -794,7 +794,16 @@ class UNetModel(nn.Module):
 
         h = x.type(self.dtype)
         for module in self.input_blocks:
-            h = module(h, emb, context)
+            try:
+                h = module(h, emb, context)
+            except RuntimeError as e:
+                if h.dtype != emb.dtype:
+                    prev_dtype = h.dtype
+                    new_dtype = emb.dtype
+                    print(f"[WARNING] UNetModel.forward: dtype mismatch detected. Casting h {prev_dtype} -> {new_dtype}")
+                    h = h.type(new_dtype)
+                else:
+                    raise e
             hs.append(h)
         h = self.middle_block(h, emb, context)
         for module in self.output_blocks:

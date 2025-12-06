@@ -24,7 +24,7 @@ wget -P models "https://www.modelscope.cn/models/AI-ModelScope/stable-diffusion-
 ```
 #### inference
 ```
-
+python txt2stereo.py --prompt="a cube intersected by a torus" --outfile="cube-vs-torus.png" --depthmodel_path=midas_models/dpt_hybrid-midas-501f0c75.pt --ckpt=models/v2-1_768-ema-pruned.ckpt --config=StableDiffusion/configs/stable-diffusion/v2-inference-v.yaml
 ```
 
 
